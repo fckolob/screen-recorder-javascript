@@ -1,3 +1,4 @@
+// Version: 1.1.0 - Responsive & Robust Save
 const preview = document.getElementById('preview');
 const pickSourceBtn = document.getElementById('pick-source-btn');
 const pickSaveBtn = document.getElementById('pick-save-btn');
@@ -15,6 +16,7 @@ let startTime;
 let timerInterval;
 let currentStream = null;
 let fileHandle = null;
+let isFilePickerBlocked = false;
 
 // Feature Detection
 const supportsDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
@@ -33,7 +35,23 @@ function showMessage(text, type = 'error') {
 /**
  * Initializes the app based on browser support.
  */
-function init() {
+async function init() {
+    // Check for Secure Context
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        showMessage("Screen recording requires a secure (HTTPS) connection. Please check your URL.", 'error');
+        pickSourceBtn.disabled = true;
+        return;
+    }
+
+    // Proactive Brave Tip
+    if (navigator.brave && await navigator.brave.isBrave()) {
+        const braveTip = document.createElement('div');
+        braveTip.className = "system-message info";
+        braveTip.style.marginBottom = "1rem";
+        braveTip.innerHTML = "<strong>Brave User Tip:</strong> If recording fails, ensure <strong>Shields</strong> are down or set fingerprinting protection to 'Standard'.";
+        systemMessage.parentNode.insertBefore(braveTip, systemMessage);
+    }
+
     if (!supportsDisplayMedia) {
         if (isMobile) {
             showMessage("Screen recording is not supported on mobile browsers. Please use a desktop browser like Chrome, Edge, or Brave.");
@@ -46,7 +64,7 @@ function init() {
     if (!supportsFileSystemAccess) {
         // Fallback for file picker
         pickSaveBtn.classList.add('hidden');
-        saveStatus.textContent = "Auto-download mode: Recordings will save to your Downloads folder.";
+        saveStatus.textContent = "Auto-download mode active: Recordings will save to your Downloads folder.";
         saveStatus.style.color = "var(--text-dim)";
     }
 }
@@ -70,14 +88,26 @@ async function pickSource() {
     try {
         if (!supportsDisplayMedia) return;
 
+        // Reset system message
+        systemMessage.classList.add('hidden');
+
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
         }
 
-        currentStream = await navigator.mediaDevices.getDisplayMedia({
+        // Constraints with fallbacks for stricter browsers (like Brave)
+        const constraints = {
             video: { cursor: "always" },
-            audio: { echoCancellation: true, noiseSuppression: true }
-        });
+            audio: true
+        };
+
+        try {
+            currentStream = await navigator.mediaDevices.getDisplayMedia(constraints);
+        } catch (initialErr) {
+            console.warn("Initial getDisplayMedia failed, retrying with basic constraints:", initialErr);
+            // Retry with minimal constraints
+            currentStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        }
 
         preview.srcObject = currentStream;
         
@@ -86,7 +116,6 @@ async function pickSource() {
         
         // Enable Start button if source is ready
         startBtn.disabled = false;
-        systemMessage.classList.add('hidden');
 
         // Handle case where user stops sharing via browser UI
         videoTrack.onended = () => {
@@ -99,9 +128,15 @@ async function pickSource() {
     } catch (err) {
         if (err.name === 'NotAllowedError') {
             showMessage("Permission denied. Please allow screen sharing to record.", 'info');
+        } else if (err.name === 'SecurityError') {
+            showMessage("Security Error: Brave Shields or browser security might be blocking the capture. Try disabling Shields for this site.", 'error');
         } else {
             console.error("Error picking source:", err);
-            showMessage("Error selecting source: " + err.message);
+            let msg = `Error (${err.name}): ${err.message}`;
+            if (navigator.userAgent.includes("Brave")) {
+                msg += " (Tip: Check your Brave Shields or Fingerprinting protection settings)";
+            }
+            showMessage(msg);
         }
     }
 }
@@ -121,10 +156,21 @@ async function pickSaveLocation() {
             }],
         });
         saveStatus.textContent = `Saving to: ${fileHandle.name}`;
+        saveStatus.style.color = "var(--secondary)";
     } catch (err) {
-        if (err.name !== 'AbortError') {
+        if (err.name === 'AbortError') {
+            // User cancelled, do nothing
+        } else if (err.name === 'SecurityError' || err.name === 'NotAllowedError') {
+            console.warn("File System Access blocked by browser:", err);
+            isFilePickerBlocked = true;
+            saveStatus.textContent = "Browser blocked folder access. Using Auto-download mode.";
+            saveStatus.style.color = "#fca5a5";
+            // Disable button to prevent repeated errors
+            pickSaveBtn.disabled = true;
+            pickSaveBtn.style.opacity = "0.5";
+        } else {
             console.error("Error picking save location:", err);
-            saveStatus.textContent = "Error setting save path.";
+            saveStatus.textContent = "Error setting path. Will auto-download.";
         }
     }
 }
@@ -200,8 +246,8 @@ async function saveRecording() {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
     
     try {
-        // Use File System Access API if available and fileHandle exists
-        if (supportsFileSystemAccess && (fileHandle || confirm("Save to specific location? (Cancel to auto-download)"))) {
+        // Use File System Access API if available, not blocked, and fileHandle exists or user wants to pick
+        if (supportsFileSystemAccess && !isFilePickerBlocked && (fileHandle || confirm("Save to specific location? (Cancel to auto-download)"))) {
             if (!fileHandle) {
                 fileHandle = await window.showSaveFilePicker({
                     suggestedName: `recording-${new Date().getTime()}.webm`,
@@ -232,13 +278,20 @@ async function saveRecording() {
 }
 
 function triggerDownload(blob) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `recording-${new Date().getTime()}.webm`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showMessage("Recording saved to Downloads folder.", 'info');
+    try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recording-${new Date().getTime()}.webm`;
+        document.body.appendChild(a); // Append to body for better browser support
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showMessage("Recording saved to Downloads folder.", 'info');
+    } catch (err) {
+        console.error("Download fallback failed:", err);
+        showMessage("Save failed. Your browser might be blocking the download. Check your settings.", 'error');
+    }
 }
 
 /**
