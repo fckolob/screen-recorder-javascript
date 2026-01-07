@@ -24,7 +24,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    padding: 2rem 1rem;
     position: relative;
 }
 
@@ -66,12 +66,14 @@ body {
     border: 1px solid var(--glass-border);
     border-radius: 24px;
     padding: 2.5rem;
-    width: 90%;
+    width: 100%;
     max-width: 800px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
     gap: 2rem;
+    position: relative;
+    z-index: 1;
 }
 
 header {
@@ -316,4 +318,87 @@ h1 {
 
 .instruction-panel strong {
     color: var(--text-main);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .glass-container {
+        padding: 1.5rem;
+        gap: 1.5rem;
+        border-radius: 16px;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    .workflow-steps {
+        gap: 1rem;
+    }
+
+    .step {
+        padding: 1rem;
+    }
+
+    .timer {
+        font-size: 1.2rem;
+        right: 1rem;
+        bottom: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 1rem 0.5rem;
+    }
+
+    .glass-container {
+        padding: 1rem;
+        gap: 1.25rem;
+    }
+
+    .logo-icon {
+        width: 28px;
+        height: 28px;
+    }
+
+    h1 {
+        font-size: 1.25rem;
+    }
+
+    .subtitle {
+        font-size: 0.85rem;
+    }
+
+    .preview-area {
+        border-radius: 12px;
+    }
+
+    .step-num {
+        width: 24px;
+        height: 24px;
+        font-size: 0.7rem;
+        top: -8px;
+        left: -8px;
+    }
+
+    .btn {
+        padding: 0.7rem;
+        font-size: 0.85rem;
+    }
+
+    .timer {
+        font-size: 1rem;
+    }
+}
+
+/* Support for very tall screens or short screens */
+@media (max-height: 600px) {
+    body {
+        align-items: flex-start;
+    }
+    
+    .glass-container {
+        margin: 1rem auto;
+    }
 }
