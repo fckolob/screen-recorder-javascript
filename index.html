@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visionary - Premium Screen Recorder</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="glass-container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <h1>Visionary</h1>
+            </div>
+            <p class="subtitle">Next-gen screen capture for the modern web.</p>
+        </header>
+
+        <section class="preview-area">
+            <video id="preview" autoplay muted playsinline></video>
+            <div class="overlay-info" id="status-overlay">
+                <span class="status-dot"></span>
+                <span id="status-text">Ready to Record</span>
+            </div>
+            <div class="timer" id="recording-timer">00:00:00</div>
+        </section>
+
+        <section class="workflow-steps">
+            <div class="step" id="step-1">
+                <span class="step-num">1</span>
+                <div class="step-content">
+                    <h3>Select Source</h3>
+                    <button id="pick-source-btn" class="btn btn-secondary">
+                        <span class="icon">📺</span> Choose Tab/Screen
+                    </button>
+                    <p class="step-status" id="source-status">No source selected</p>
+                </div>
+            </div>
+
+            <div class="step" id="step-2">
+                <span class="step-num">2</span>
+                <div class="step-content">
+                    <h3>Choose Save Location</h3>
+                    <button id="pick-save-btn" class="btn btn-secondary">
+                        <span class="icon">💾</span> Set Output Path
+                    </button>
+                    <p class="step-status" id="save-status">Auto-download if not set</p>
+                </div>
+            </div>
+
+            <div class="step" id="step-3">
+                <span class="step-num">3</span>
+                <div class="step-content">
+                    <h3>Record</h3>
+                    <div class="action-buttons">
+                        <button id="start-btn" class="btn btn-primary" disabled>
+                            <span class="icon">⏺</span> Start
+                        </button>
+                        <button id="stop-btn" class="btn btn-danger" disabled>
+                            <span class="icon">⏹</span> Stop & Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="instruction-panel">
+            <h3>Quick Tip</h3>
+            <p>To record <strong>system audio</strong>, select "Entire Screen" or "Window" and ensure the <strong>"Share system audio"</strong> checkbox is checked in the browser dialog.</p>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
