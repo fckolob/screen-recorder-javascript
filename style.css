@@ -10,6 +10,32 @@
     --text-dim: #94a3b8;
 }
 
+.hidden {
+    display: none !important;
+}
+
+.system-message {
+    padding: 1rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    text-align: center;
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    animation: fadeIn 0.3s ease;
+}
+
+.system-message.info {
+    background: rgba(79, 70, 229, 0.1);
+    color: #a5b4fc;
+    border-color: rgba(79, 70, 229, 0.2);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 * {
     margin: 0;
     padding: 0;

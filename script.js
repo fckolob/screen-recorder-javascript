@@ -7,6 +7,7 @@ const timerDisplay = document.getElementById('recording-timer');
 const statusText = document.getElementById('status-text');
 const sourceStatus = document.getElementById('source-status');
 const saveStatus = document.getElementById('save-status');
+const systemMessage = document.getElementById('system-message');
 
 let mediaRecorder;
 let recordedChunks = [];
@@ -14,6 +15,41 @@ let startTime;
 let timerInterval;
 let currentStream = null;
 let fileHandle = null;
+
+// Feature Detection
+const supportsDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+const supportsFileSystemAccess = !!window.showSaveFilePicker;
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+/**
+ * Shows a system message banner.
+ */
+function showMessage(text, type = 'error') {
+    systemMessage.textContent = text;
+    systemMessage.className = `system-message ${type}`;
+    systemMessage.classList.remove('hidden');
+}
+
+/**
+ * Initializes the app based on browser support.
+ */
+function init() {
+    if (!supportsDisplayMedia) {
+        if (isMobile) {
+            showMessage("Screen recording is not supported on mobile browsers. Please use a desktop browser like Chrome, Edge, or Brave.");
+        } else {
+            showMessage("Your browser does not support screen recording. Please update or use a modern desktop browser.");
+        }
+        pickSourceBtn.disabled = true;
+    }
+
+    if (!supportsFileSystemAccess) {
+        // Fallback for file picker
+        pickSaveBtn.classList.add('hidden');
+        saveStatus.textContent = "Auto-download mode: Recordings will save to your Downloads folder.";
+        saveStatus.style.color = "var(--text-dim)";
+    }
+}
 
 /**
  * Updates the recording timer display.
@@ -32,12 +68,14 @@ function updateTimer() {
  */
 async function pickSource() {
     try {
+        if (!supportsDisplayMedia) return;
+
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
         }
 
         currentStream = await navigator.mediaDevices.getDisplayMedia({
-            video: { cursor: "always", displaySurface: "browser" },
+            video: { cursor: "always" },
             audio: { echoCancellation: true, noiseSuppression: true }
         });
 
@@ -48,6 +86,7 @@ async function pickSource() {
         
         // Enable Start button if source is ready
         startBtn.disabled = false;
+        systemMessage.classList.add('hidden');
 
         // Handle case where user stops sharing via browser UI
         videoTrack.onended = () => {
@@ -58,8 +97,12 @@ async function pickSource() {
         };
 
     } catch (err) {
-        console.error("Error picking source:", err);
-        sourceStatus.textContent = "Error selecting source.";
+        if (err.name === 'NotAllowedError') {
+            showMessage("Permission denied. Please allow screen sharing to record.", 'info');
+        } else {
+            console.error("Error picking source:", err);
+            showMessage("Error selecting source: " + err.message);
+        }
     }
 }
 
@@ -67,6 +110,8 @@ async function pickSource() {
  * Allows user to choose the save location before or after recording.
  */
 async function pickSaveLocation() {
+    if (!supportsFileSystemAccess) return;
+
     try {
         fileHandle = await window.showSaveFilePicker({
             suggestedName: `recording-${new Date().getTime()}.webm`,
@@ -92,34 +137,49 @@ async function startRecording() {
 
     recordedChunks = [];
     const options = { mimeType: 'video/webm; codecs=vp9,opus' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options.mimeType = 'video/webm';
+    
+    // Check supported types
+    const types = [
+        'video/webm; codecs=vp9,opus',
+        'video/webm; codecs=vp8,opus',
+        'video/webm'
+    ];
+    let selectedType = types.find(type => MediaRecorder.isTypeSupported(type));
+    
+    if (!selectedType) {
+        showMessage("Your browser doesn't support the required recording formats.");
+        return;
     }
 
-    mediaRecorder = new MediaRecorder(currentStream, options);
+    try {
+        mediaRecorder = new MediaRecorder(currentStream, { mimeType: selectedType });
 
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-            recordedChunks.push(e.data);
-        }
-    };
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+                recordedChunks.push(e.data);
+            }
+        };
 
-    mediaRecorder.onstop = async () => {
-        await saveRecording();
-        resetToInitial();
-    };
+        mediaRecorder.onstop = async () => {
+            await saveRecording();
+            resetToInitial();
+        };
 
-    mediaRecorder.start();
-    startTime = Date.now();
-    timerInterval = setInterval(updateTimer, 1000);
+        mediaRecorder.start();
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
 
-    // Update UI
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    pickSourceBtn.disabled = true;
-    statusText.textContent = "Recording...";
-    document.querySelector('.status-dot').style.background = "#ef4444";
-    document.querySelector('.status-dot').style.boxShadow = "0 0 8px #ef4444";
+        // Update UI
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        pickSourceBtn.disabled = true;
+        statusText.textContent = "Recording...";
+        document.querySelector('.status-dot').style.background = "#ef4444";
+        document.querySelector('.status-dot').style.boxShadow = "0 0 8px #ef4444";
+    } catch (err) {
+        console.error("Error starting recording:", err);
+        showMessage("Failed to start recording: " + err.message);
+    }
 }
 
 /**
@@ -140,37 +200,45 @@ async function saveRecording() {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
     
     try {
-        // If fileHandle wasn't pre-selected, ask now
-        if (!fileHandle) {
-            fileHandle = await window.showSaveFilePicker({
-                suggestedName: `recording-${new Date().getTime()}.webm`,
-                types: [{
-                    description: 'WebM Video',
-                    accept: { 'video/webm': ['.webm'] },
-                }],
-            });
-        }
+        // Use File System Access API if available and fileHandle exists
+        if (supportsFileSystemAccess && (fileHandle || confirm("Save to specific location? (Cancel to auto-download)"))) {
+            if (!fileHandle) {
+                fileHandle = await window.showSaveFilePicker({
+                    suggestedName: `recording-${new Date().getTime()}.webm`,
+                    types: [{
+                        description: 'WebM Video',
+                        accept: { 'video/webm': ['.webm'] },
+                    }],
+                });
+            }
 
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        alert(`Saved successfully to ${fileHandle.name}`);
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return; // Successfully saved
+        }
+        
+        // Fallback: Auto-download
+        triggerDownload(blob);
 
     } catch (err) {
         if (err.name === 'AbortError') {
-            // Fallback to auto-download if cancelled
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `recording-${new Date().getTime()}.webm`;
-            a.click();
-            URL.revokeObjectURL(url);
-            alert("Save cancelled. Downloaded to default folder.");
+            triggerDownload(blob);
         } else {
             console.error("Error saving file:", err);
-            alert("Error saving file.");
+            triggerDownload(blob);
         }
     }
+}
+
+function triggerDownload(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recording-${new Date().getTime()}.webm`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showMessage("Recording saved to Downloads folder.", 'info');
 }
 
 /**
@@ -179,9 +247,9 @@ async function saveRecording() {
 function resetToInitial() {
     clearInterval(timerInterval);
     timerDisplay.textContent = "00:00:00";
-    startBtn.disabled = true; // Needs source again
+    startBtn.disabled = true;
     stopBtn.disabled = true;
-    pickSourceBtn.disabled = false;
+    pickSourceBtn.disabled = !supportsDisplayMedia;
     statusText.textContent = "Ready to Record";
     document.querySelector('.status-dot').style.background = "#10b981";
     document.querySelector('.status-dot').style.boxShadow = "0 0 8px #10b981";
@@ -192,7 +260,12 @@ function resetToInitial() {
     }
     preview.srcObject = null;
     sourceStatus.textContent = "No source selected";
-    saveStatus.textContent = "Auto-download if not set";
+    
+    if (!supportsFileSystemAccess) {
+        saveStatus.textContent = "Auto-download mode active";
+    } else {
+        saveStatus.textContent = "Auto-download if not set";
+    }
     fileHandle = null;
 }
 
@@ -200,3 +273,6 @@ pickSourceBtn.addEventListener('click', pickSource);
 pickSaveBtn.addEventListener('click', pickSaveLocation);
 startBtn.addEventListener('click', startRecording);
 stopBtn.addEventListener('click', stopRecording);
+
+// Run initialization
+init();
